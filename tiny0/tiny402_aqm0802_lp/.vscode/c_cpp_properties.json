@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${AVR_GCC_PATH}/avr/include",
+                "${workspaceFolder}/../common/include"
+            ],
+            "defines": [
+                "__AVR_ATtiny402__",
+                "I2C_INCLUDE_IMPL",
+                "AQM0802_INCLUDE_IMPL",
+                "DELAY_INCLUDE_IMPL"
+            ],
+            "compilerPath": "${AVR_GCC_PATH}/bin/avr-g++",
+            "cStandard": "c17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compilerArgs": [
+                "-Os",
+                "-mmcu=attiny402",
+                "-DF_CPU=20000000UL"
+            ]
+        }
+    ],
+    "version": 4
+}
