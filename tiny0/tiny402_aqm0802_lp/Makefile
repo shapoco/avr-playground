@@ -1,4 +1,4 @@
-.PHONY: all build flash clean
+.PHONY: all build fuse-read fuse-write flash-write clean
 
 APP_NAME := tiny402_ssd1306_scroll
 
@@ -10,9 +10,9 @@ TOOLS_DIR := tools
 MCU := attiny402
 F_CPU := 32768
 
-CXX := $(AVR_GCC_PATH)/bin/avr-g++
-OBJCOPY := $(AVR_GCC_PATH)/bin/avr-objcopy
-AVR_SIZE := $(AVR_GCC_PATH)/bin/avr-size
+CXX := avr-g++
+OBJCOPY := avr-objcopy
+AVR_SIZE := avr-size
 
 COMMON_INC_DIR := $(REPO_DIR)/common/include
 COMMON_HPP_LIST := $(wildcard $(COMMON_INC_DIR)/tiny0/*.hpp)
@@ -55,7 +55,29 @@ $(BUILD_DIR)/%.o: $(APP_SRC_DIR)/%.cpp $(APP_HPP_LIST) $(EXTRA_DEPENDENCIES)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-include $(TOOLS_DIR)/avrdude_wsl/tools.mk
+fuse-read:
+	avrdude \
+		${AVRDUDE_UPDI_OPTS} \
+		-p $(MCU) \
+		-U bodcfg:r:-:h \
+		-U osccfg:r:-:h \
+		-U syscfg0:r:-:h
+
+fuse-write:
+	avrdude \
+		${AVRDUDE_UPDI_OPTS} \
+		-p $(MCU) \
+		-x rtsdtr=low \
+		-U bodcfg:w:0x10:m \
+		-U osccfg:w:0x01:m \
+		-U syscfg0:w:0xf7:m
+
+flash-write:
+	avrdude \
+		${AVRDUDE_UPDI_OPTS} \
+		-p $(MCU) \
+		-x rtsdtr=low \
+		-U flash:w:$(HEX)
 
 clean:
 	rm -rf $(BUILD_DIR)

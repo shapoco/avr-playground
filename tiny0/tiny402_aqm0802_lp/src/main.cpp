@@ -68,21 +68,22 @@ int main() {
   _PROTECTED_WRITE(CLKCTRL.MCLKCTRLA, CLKCTRL_CLKSEL_OSCULP32K_gc);
   _PROTECTED_WRITE(CLKCTRL.MCLKCTRLB, ~CLKCTRL_PEN_bm);
 
+  delayMs(1000);
+
   i2c::init(i2c::getBaud(F_CPU, 15000, 0));
   i2c::busReset();
+  display.init();
 
   gpio::setDir(LED_PORT, true);
 
-  delayMs(1000);
-
-  display.init();
-
+  // Initialize CGRAM
   display.setCgramAddress(0x08);
-  display.writeProgmemArray(openEye, sizeof(openEye));
-  display.writeProgmemArray(closedMouth, sizeof(closedMouth));
-  display.writeProgmemArray(openEye, sizeof(openEye));
-  display.writeProgmemArray(largeHeart, sizeof(largeHeart));
+  display.writeProgmemArray(openEye, sizeof(openEye));          // \x01: Eye
+  display.writeProgmemArray(closedMouth, sizeof(closedMouth));  // \x02: Mouth
+  display.writeProgmemArray(openEye, sizeof(openEye));          // \x03: Eye
+  display.writeProgmemArray(largeHeart, sizeof(largeHeart));    // \x04: Heart
 
+  // Initialize Face
   display.setDdramAddress(0x01);
   display.writeString("(\x01\x02\x03)\x04");
 
@@ -92,6 +93,7 @@ int main() {
   uint8_t aniPos = 0;
 
   while (true) {
+    // Message Scrolling
     display.setDdramAddress(0x40);
     for (uint8_t i = 0; i < 8; i++) {
       int8_t idx = -msgPos + i;
@@ -106,7 +108,9 @@ int main() {
       msgPos = 8;
     }
 
+    // Face Animation
     if (aniPos < 4) {
+      // Open/Close Eyes
       if ((aniPos & 1) == 0) {
         display.setCgramAddress(0x08);
         display.writeProgmemArray(openEye, sizeof(openEye));
@@ -119,6 +123,7 @@ int main() {
         display.writeProgmemArray(closedEyeRight, sizeof(closedEyeRight));
       }
     } else {
+      // Open/Close Mouth
       display.setCgramAddress(0x10);
       if ((aniPos & 1) == 0) {
         display.writeProgmemArray(openMouth, sizeof(openMouth));
@@ -127,6 +132,7 @@ int main() {
       }
     }
 
+    // Heart Animation
     display.setCgramAddress(0x20);
     if ((aniPos & 1) == 0) {
       display.writeProgmemArray(largeHeart, sizeof(largeHeart));
