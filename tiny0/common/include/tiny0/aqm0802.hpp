@@ -6,7 +6,17 @@
 #include "tiny0/delay.hpp"
 #include "tiny0/i2c.hpp"
 
+#define AQM0802_INLINE inline __attribute__((always_inline))
+#define AQM0802_NOINLINE __attribute__((noinline))
+
 namespace aqm0802 {
+
+static constexpr int CGRAM_DEPTH = 6;
+
+enum DCX : uint8_t {
+  DATA = 0x40,
+  COMMAND = 0x00,
+};
 
 enum Command : uint8_t {
   CLEAR = 0x01,
@@ -18,27 +28,6 @@ enum Command : uint8_t {
   SET_CGRAM_ADDR = 0x40,
   SET_DDRAM_ADDR = 0x80
 };
-
-extern const uint8_t INIT_SEQUENCE[];
-
-class Display {
- public:
-  static constexpr int CGRAM_DEPTH = 6;
-  const uint8_t devAddr;
-
-  Display(uint8_t devaddr = (0x3E << 1));
-  void writeCommand(uint8_t cmd);
-  void init();
-  void setDdramAddress(uint8_t offset);
-  void setCgramAddress(uint8_t offset);
-  void writeChar(uint8_t c);
-  void writeArray(const uint8_t *data, uint8_t length);
-  void writeString(const char *str);
-  void writeProgmemArray(const uint8_t *data, uint8_t length);
-  void writeProgmemString(const char *str);
-};
-
-#ifdef AQM0802_INCLUDE_IMPL
 
 const uint8_t INIT_SEQUENCE[] PROGMEM = {
     // clang-format off
@@ -56,73 +45,84 @@ const uint8_t INIT_SEQUENCE[] PROGMEM = {
     // clang-format on
 };
 
-Display::Display(uint8_t devaddr) : devAddr(devaddr) {}
+class Display {
+ public:
+  const uint8_t devAddr;
 
-void Display::writeCommand(uint8_t cmd) {
-  uint8_t data[2] = {0x00, cmd};
+  AQM0802_INLINE Display(uint8_t devaddr = (0x3E << 1)) : devAddr(devaddr) {}
+
+  AQM0802_INLINE void init() {
+    for (uint8_t i = 0; i < sizeof(INIT_SEQUENCE); i += 2) {
+      uint8_t byte1 = pgm_read_byte(&INIT_SEQUENCE[i]);
+      uint8_t byte2 = pgm_read_byte(&INIT_SEQUENCE[i + 1]);
+      if (byte1 == 0) {
+        // Command
+        writeCommand(DCX::COMMAND, byte2);
+        delayUs(50);
+      } else {
+        // Delay in ms
+        for (uint8_t t = byte2; t > 0; t--) {
+          delayMs(1);
+        }
+      }
+    }
+  }
+
+  AQM0802_NOINLINE void writeCommand(DCX dc, uint8_t cmd);
+  AQM0802_NOINLINE void writeArray(const uint8_t *data, uint8_t length);
+  AQM0802_NOINLINE void writeString(const char *str);
+  AQM0802_NOINLINE void writeProgmemArray(const uint8_t *data, uint8_t length);
+  AQM0802_NOINLINE void writeProgmemString(const char *str);
+
+  AQM0802_INLINE void writeChar(uint8_t c) { writeCommand(DCX::DATA, c); }
+
+  AQM0802_INLINE void setDdramAddress(uint8_t offset) {
+    writeCommand(DCX::COMMAND,
+                 static_cast<uint8_t>(Command::SET_DDRAM_ADDR) | offset);
+  }
+
+  AQM0802_INLINE void setCgramAddress(uint8_t offset) {
+    writeCommand(DCX::COMMAND,
+                 static_cast<uint8_t>(Command::SET_CGRAM_ADDR) | offset);
+  }
+};
+
+#ifdef AQM0802_INCLUDE_IMPL
+
+AQM0802_NOINLINE void Display::writeCommand(DCX dc, uint8_t cmd) {
+  uint8_t data[2] = {static_cast<uint8_t>(dc), cmd};
   i2c::start(devAddr);
   i2c::writeArray(data, sizeof(data));
   i2c::stop();
 }
 
-void Display::init() {
-  for (uint8_t i = 0; i < sizeof(INIT_SEQUENCE); i += 2) {
-    uint8_t byte1 = pgm_read_byte(&INIT_SEQUENCE[i]);
-    uint8_t byte2 = pgm_read_byte(&INIT_SEQUENCE[i + 1]);
-    if (byte1 == 0) {
-      // Command
-      writeCommand(byte2);
-      delayUs(50);
-    } else {
-      // Delay in ms
-      for (uint8_t t = byte2; t > 0; t--) {
-        delayMs(1);
-      }
-    }
-  }
-}
-
-void Display::setDdramAddress(uint8_t offset) {
-  writeCommand(static_cast<uint8_t>(Command::SET_DDRAM_ADDR) | offset);
-}
-
-void Display::setCgramAddress(uint8_t offset) {
-  writeCommand(static_cast<uint8_t>(Command::SET_CGRAM_ADDR) | offset);
-}
-
-void Display::writeChar(uint8_t c) {
-  uint8_t tmp[] = {0x40, static_cast<uint8_t>(c)};
-  i2c::start(devAddr);
-  i2c::writeArray(tmp, sizeof(tmp));
-  i2c::stop();
-}
-
-void Display::writeArray(const uint8_t *data, uint8_t length) {
+AQM0802_NOINLINE void Display::writeArray(const uint8_t *data, uint8_t length) {
   for (uint8_t i = 0; i < length; i++) {
     writeChar(data[i]);
   }
 }
 
-void Display::writeString(const char *str) {
+AQM0802_NOINLINE void Display::writeString(const char *str) {
   const uint8_t *ptr = reinterpret_cast<const uint8_t *>(str);
   while (*ptr) {
     writeChar(*ptr++);
   }
 }
 
-void Display::writeProgmemArray(const uint8_t *data, uint8_t length) {
+AQM0802_NOINLINE void Display::writeProgmemArray(const uint8_t *data,
+                                                 uint8_t length) {
   for (uint8_t i = 0; i < length; i++) {
     writeChar(pgm_read_byte(&data[i]));
   }
 }
 
-void Display::writeProgmemString(const char *str) {
+AQM0802_NOINLINE void Display::writeProgmemString(const char *str) {
   const uint8_t *ptr = reinterpret_cast<const uint8_t *>(str);
-  while (*ptr) {
-    writeChar(pgm_read_byte(ptr++));
+  char c;
+  while (c = pgm_read_byte(ptr++)) {
+    writeChar(c);
   }
 }
-
 #endif
 
 }  // namespace aqm0802

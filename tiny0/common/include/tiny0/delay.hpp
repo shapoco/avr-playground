@@ -1,28 +1,17 @@
 #pragma once
 
-#include <util/delay.h>
+#include <stdint.h>
 
 #define DELAY_INLINE inline __attribute__((always_inline))
 
-static DELAY_INLINE void delayMs(uint16_t ms) { _delay_ms(ms); }
-static DELAY_INLINE void delayUs(uint16_t us) { _delay_us(us); }
-static DELAY_INLINE void delayVariableMs(uint16_t ms);
-
-#ifdef DELAY_INCLUDE_IMPL
-
-static DELAY_INLINE void delayVariableMs(uint16_t ms) {
-  while (ms >= 256) {
-    delayMs(256);
-    ms -= 256;
-  }
-  while (ms >= 16) {
-    delayMs(16);
-    ms -= 16;
-  }
-  while (ms > 0) {
-    delayMs(1);
-    ms -= 1;
-  }
+static DELAY_INLINE void delayMs(uint16_t ms) {
+  extern void __builtin_avr_delay_cycles(uint32_t);
+  const uint32_t ticks = ((uint64_t)F_CPU * ms + 999) / 1000;
+  __builtin_avr_delay_cycles(ticks);
 }
 
-#endif
+static DELAY_INLINE void delayUs(uint16_t us) {
+  extern void __builtin_avr_delay_cycles(uint32_t);
+  const uint32_t ticks = ((uint64_t)F_CPU * us + 999999) / 1000000;
+  __builtin_avr_delay_cycles(ticks);
+}

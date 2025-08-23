@@ -1,5 +1,8 @@
 #pragma once
 
+#define I2C_INLINE inline __attribute__((always_inline))
+#define I2C_NOINLINE __attribute__((noinline))
+
 #include <avr/io.h>
 #include <stdint.h>
 #include <util/delay.h>
@@ -34,17 +37,39 @@ static constexpr uint8_t getBaud(uint32_t cpuFreq, uint32_t sclFreq,
          2;
 }
 
-void init(uint8_t baud);
-void start(uint8_t devAddrRxW);
-void write(const uint8_t data);
-void writeArray(const uint8_t* data, uint8_t length);
-void stop();
-void waitIdle();
-void disable();
-void enable();
-void busReset();
+I2C_NOINLINE void busReset();
+I2C_NOINLINE void init(uint8_t baud);
+I2C_NOINLINE void writeArray(const uint8_t* data, uint8_t length);
 
-void init(uint8_t baud) {
+static I2C_INLINE void waitIdle() {
+  while (!(TWI0.MSTATUS & (TWI_WIF_bm | TWI_RIF_bm)));
+}
+
+static I2C_INLINE void start(uint8_t devAddrRxW) {
+  TWI0.MADDR = devAddrRxW;
+  TWI0.MCTRLB |= TWI_MCMD_REPSTART_gc;
+}
+
+static I2C_INLINE void write(const uint8_t data) { writeArray(&data, 1); }
+
+static I2C_INLINE void stop() {
+  waitIdle();
+  TWI0.MCTRLB |= TWI_MCMD_STOP_gc;
+}
+
+static I2C_INLINE void disable() { TWI0.MCTRLA &= ~TWI_ENABLE_bm; }
+
+static I2C_INLINE void enable() {
+  gpio::setDirMulti((1 << Ports::SDA) | (1 << Ports::SCL), false);
+  TWI0.MCTRLA |= TWI_ENABLE_bm;
+  TWI0.MSTATUS |= TWI_BUSSTATE_IDLE_gc;
+}
+
+#ifdef I2C_INCLUDE_IMPL
+
+static void delay50us() { delayUs(50); }
+
+I2C_NOINLINE void init(uint8_t baud) {
   TWI0.MBAUD = baud;
   TWI0.MCTRLA = TWI_ENABLE_bm | TWI_TIMEOUT_DISABLED_gc;
   TWI0.MCTRLB |= TWI_FLUSH_bm;
@@ -52,42 +77,17 @@ void init(uint8_t baud) {
   TWI0.MSTATUS |= TWI_RIF_bm | TWI_WIF_bm;
 }
 
-void start(uint8_t devAddrRxW) {
-  TWI0.MADDR = devAddrRxW;
-  TWI0.MCTRLB |= TWI_MCMD_REPSTART_gc;
-}
-
-void write(const uint8_t data) {
-  waitIdle();
-  TWI0.MDATA = data;
-  TWI0.MCTRLB |= TWI_MCMD_RECVTRANS_gc;
-}
-
-void writeArray(const uint8_t* data, uint8_t length) {
+I2C_NOINLINE void writeArray(const uint8_t* data, uint8_t length) {
   for (uint8_t i = 0; i < length; i++) {
-    write(data[i]);
+    waitIdle();
+    TWI0.MDATA = data[i];
+    TWI0.MCTRLB |= TWI_MCMD_RECVTRANS_gc;
   }
 }
 
-void stop() {
-  waitIdle();
-  TWI0.MCTRLB |= TWI_MCMD_STOP_gc;
-}
-
-void waitIdle() { while (!(TWI0.MSTATUS & (TWI_WIF_bm | TWI_RIF_bm))); }
-
-void disable() { TWI0.MCTRLA &= ~TWI_ENABLE_bm; }
-
-void enable() {
-  gpio::setDirMulti((1 << Ports::SDA) | (1 << Ports::SCL), false);
-  TWI0.MCTRLA |= TWI_ENABLE_bm;
-  TWI0.MSTATUS |= TWI_BUSSTATE_IDLE_gc;
-}
-
-void busReset() {
+I2C_NOINLINE void busReset() {
   constexpr uint8_t MAX_RETRIES = 3;
   constexpr uint8_t MAX_SCL_PULSES = 16;
-  constexpr uint8_t SCL_PERIOD_US = 100;
 
   // change I2C pins to GPIO mode
   disable();
@@ -96,34 +96,37 @@ void busReset() {
   gpio::setDirMulti((1 << Ports::SDA) | (1 << Ports::SCL), false);
   gpio::writeMulti((1 << Ports::SDA) | (1 << Ports::SCL), 0);
 
-  for (int i = 0; i < MAX_RETRIES; i++) {
+  for (uint8_t i = MAX_RETRIES; i != 0; i--) {
     // check SDA state
     if (gpio::read(Ports::SDA)) {
-      // SDA is high, no need to reset
+      // SDA is already high, no need to reset
       break;
     }
 
     // send SCL pulses until SDA is high
     gpio::setDir(Ports::SDA, false);
     gpio::setDir(Ports::SCL, true);
-    delayUs(SCL_PERIOD_US);
-    for (int j = 0; j < MAX_SCL_PULSES; j++) {
+    delay50us();
+    for (uint8_t j = MAX_SCL_PULSES; j != 0; j--) {
       gpio::setDir(Ports::SCL, false);
-      delayUs(SCL_PERIOD_US / 2);
+      delay50us();
       gpio::setDir(Ports::SCL, true);
-      delayUs(SCL_PERIOD_US / 2);
+      delay50us();
       if (gpio::read(Ports::SDA)) break;
     }
 
     // send stop condition
     gpio::setDir(Ports::SDA, true);
-    delayUs(SCL_PERIOD_US);
+    delay50us();
     gpio::setDir(Ports::SCL, false);
-    delayUs(SCL_PERIOD_US);
+    delay50us();
     gpio::setDir(Ports::SDA, false);
-    delayUs(SCL_PERIOD_US);
+    delay50us();
   }
 
   enable();
 }
+
+#endif
+
 }  // namespace i2c

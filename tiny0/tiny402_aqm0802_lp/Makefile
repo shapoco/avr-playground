@@ -28,13 +28,16 @@ HEX := $(BUILD_DIR)/$(APP_NAME).hex
 
 CXXFLAGS := \
 	-Os \
+	-ffunction-sections \
+	-fdata-sections \
+	-flto \
 	-mmcu=$(MCU) \
 	-DF_CPU=$(F_CPU) \
 	-I$(APP_INC_DIR) \
 	-I$(COMMON_INC_DIR)
 
 LDFLAGS := \
-	-Os \
+	-Wl,--gc-sections \
 	-mmcu=$(MCU)
 
 EXTRA_DEPENDENCIES := \
@@ -72,7 +75,7 @@ fuse-write:
 		-U osccfg:w:0x01:m \
 		-U syscfg0:w:0xf7:m
 
-flash-write:
+flash-write: $(HEX)
 	avrdude \
 		${AVRDUDE_UPDI_OPTS} \
 		-p $(MCU) \
